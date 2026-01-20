@@ -18,7 +18,6 @@ input:disabled { opacity:.5; cursor:not-allowed; }
 <body class="p-6 text-white">
 <div class="max-w-7xl mx-auto relative">
 
-<!-- AVISOS -->
 <div id="unsavedTop"
  class="hidden absolute top-0 right-0 bg-red-600 px-6 py-3 text-xl font-extrabold rounded-xl shadow">
 FICHEIRO NÃO GUARDADO
@@ -30,7 +29,6 @@ FICHEIRO NÃO GUARDADO
 ⚠️ Abra um ficheiro JSON para começar
 </div>
 
-<!-- ABAS -->
 <div class="flex gap-2 mb-6">
 <button id="tabMain" onclick="showTab('main')"
  class="bg-blue-600 px-4 py-2 rounded-xl font-semibold">Registos</button>
@@ -38,7 +36,6 @@ FICHEIRO NÃO GUARDADO
  class="bg-gray-600 px-4 py-2 rounded-xl font-semibold">Gráficos</button>
 </div>
 
-<!-- BOTÕES -->
 <div class="flex gap-2 mb-6 flex-wrap">
 <button id="saveBtn" onclick="exportJSON()" disabled
  class="bg-gray-400 px-4 py-2 rounded-xl cursor-not-allowed">
@@ -59,7 +56,6 @@ Abrir Ficheiro
  class="border p-2 rounded text-black" oninput="render(this.value)">
 </div>
 
-<!-- REGISTOS -->
 <div id="mainTab">
 
 <div id="formBlock"
@@ -106,9 +102,8 @@ FICHEIRO NÃO GUARDADO
 </div>
 </div>
 
-<!-- GRÁFICOS -->
 <div id="chartsTab" class="hidden">
-<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
 <div class="bg-white text-black p-4 rounded-xl">
 <h2 class="font-bold mb-2">Acidentes por Mês</h2>
 <canvas id="chartMonth"></canvas>
@@ -116,6 +111,10 @@ FICHEIRO NÃO GUARDADO
 <div class="bg-white text-black p-4 rounded-xl">
 <h2 class="font-bold mb-2">Acidentes por Intervalo de Dias</h2>
 <canvas id="chartRange"></canvas>
+</div>
+<div class="bg-white text-black p-4 rounded-xl">
+<h2 class="font-bold mb-2">Acidentes por Centro</h2>
+<canvas id="chartCenter"></canvas>
 </div>
 </div>
 </div>
@@ -131,11 +130,11 @@ document.getElementById('year').innerText = new Date().getFullYear();
 Chart.register(ChartDataLabels);
 
 let workers=[], nextId=1, editIndex=null;
-let chartMonth=null, chartRange=null;
+let chartMonth=null, chartRange=null, chartCenter=null;
 
 const diffDays=(s,e)=>{
  const a=new Date(s), b=e?new Date(e):new Date();
- return Math.max(0,Math.ceil((b-a)/86400000));
+ return Math.max(1,Math.ceil((b-a)/86400000)+1);
 };
 
 function markUnsaved(){
@@ -282,33 +281,46 @@ function exportExcel(){
 }
 
 function updateCharts(){
- const months={}, ranges={'1-15':0,'16-30':0,'31-60':0,'61-120':0,'+121':0};
+ const months={}, 
+       ranges={'1-15':0,'16-30':0,'31-60':0,'61-120':0,'+121':0},
+       centers={};
 
  workers.forEach(w=>{
   const m=w.inicio.slice(0,7);
   months[m]=(months[m]||0)+1;
+
   const d=diffDays(w.inicio,w.fim);
   if(d<=15)ranges['1-15']++;
   else if(d<=30)ranges['16-30']++;
   else if(d<=60)ranges['31-60']++;
   else if(d<=120)ranges['61-120']++;
   else ranges['+121']++;
+
+  const c=w.centro||'Sem Centro';
+  centers[c]=(centers[c]||0)+1;
  });
 
  chartMonth?.destroy();
  chartRange?.destroy();
+ chartCenter?.destroy();
 
  const ml=Object.keys(months).sort();
 
- chartMonth=new Chart(chartMonth?.canvas||document.getElementById('chartMonth'),{
+ chartMonth=new Chart(document.getElementById('chartMonth'),{
   type:'bar',
   data:{labels:ml,datasets:[{data:ml.map(l=>months[l])}]},
   options:{plugins:{datalabels:{anchor:'end',align:'top'}}}
  });
 
- chartRange=new Chart(chartRange?.canvas||document.getElementById('chartRange'),{
+ chartRange=new Chart(document.getElementById('chartRange'),{
   type:'bar',
   data:{labels:Object.keys(ranges),datasets:[{data:Object.values(ranges)}]},
+  options:{plugins:{datalabels:{anchor:'end',align:'top'}}}
+ });
+
+ chartCenter=new Chart(document.getElementById('chartCenter'),{
+  type:'bar',
+  data:{labels:Object.keys(centers),datasets:[{data:Object.values(centers)}]},
   options:{plugins:{datalabels:{anchor:'end',align:'top'}}}
  });
 }
