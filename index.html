@@ -18,7 +18,12 @@ input:disabled { opacity:.5; cursor:not-allowed; }
 <body class="p-6 text-white">
 <div class="max-w-7xl mx-auto relative">
 
-<!-- AVISOS -->
+<!-- TIMESTAMP -->
+<div id="fileInfo"
+ class="absolute top-0 right-40 bg-gray-800 px-4 py-2 rounded-xl text-sm font-semibold shadow">
+Última gravação: —
+</div>
+
 <div id="unsavedTop"
  class="hidden absolute top-0 right-0 bg-red-600 px-6 py-3 text-xl font-extrabold rounded-xl shadow">
 FICHEIRO NÃO GUARDADO
@@ -30,7 +35,6 @@ FICHEIRO NÃO GUARDADO
 ⚠️ Abra um ficheiro JSON para começar
 </div>
 
-<!-- ABAS -->
 <div class="flex gap-2 mb-6">
 <button id="tabMain" onclick="showTab('main')"
  class="bg-blue-600 px-4 py-2 rounded-xl font-semibold">Registos</button>
@@ -38,7 +42,6 @@ FICHEIRO NÃO GUARDADO
  class="bg-gray-600 px-4 py-2 rounded-xl font-semibold">Gráficos</button>
 </div>
 
-<!-- BOTÕES -->
 <div class="flex gap-2 mb-6 flex-wrap">
 <button id="saveBtn" onclick="exportJSON()" disabled
  class="bg-gray-400 px-4 py-2 rounded-xl cursor-not-allowed">
@@ -59,7 +62,6 @@ Abrir Ficheiro
  class="border p-2 rounded text-black" oninput="render(this.value)">
 </div>
 
-<!-- REGISTOS -->
 <div id="mainTab">
 
 <div id="formBlock"
@@ -106,9 +108,8 @@ FICHEIRO NÃO GUARDADO
 </div>
 </div>
 
-<!-- GRÁFICOS -->
 <div id="chartsTab" class="hidden">
-<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
 <div class="bg-white text-black p-4 rounded-xl">
 <h2 class="font-bold mb-2">Acidentes por Mês</h2>
 <canvas id="chartMonth"></canvas>
@@ -116,6 +117,10 @@ FICHEIRO NÃO GUARDADO
 <div class="bg-white text-black p-4 rounded-xl">
 <h2 class="font-bold mb-2">Acidentes por Intervalo de Dias</h2>
 <canvas id="chartRange"></canvas>
+</div>
+<div class="bg-white text-black p-4 rounded-xl">
+<h2 class="font-bold mb-2">Acidentes por Centro</h2>
+<canvas id="chartCenter"></canvas>
 </div>
 </div>
 </div>
@@ -130,13 +135,15 @@ andrepe @ <span id="year"></span>
 document.getElementById('year').innerText = new Date().getFullYear();
 Chart.register(ChartDataLabels);
 
-let workers=[], nextId=1, editIndex=null;
-let chartMonth=null, chartRange=null;
+let workers=[], nextId=1, editId=null;
+let chartMonth=null, chartRange=null, chartCenter=null;
 
 const diffDays=(s,e)=>{
  const a=new Date(s), b=e?new Date(e):new Date();
- return Math.max(0,Math.ceil((b-a)/86400000));
+ return Math.max(1,Math.ceil((b-a)/86400000)+1);
 };
+
+const formatTS=d=>d.toISOString().slice(0,19).replace('T',' ');
 
 function markUnsaved(){
  unsavedTop.classList.remove('hidden');
@@ -170,11 +177,11 @@ function showTab(tab){
 
 function render(filter=''){
  tableBody.innerHTML='';
- workers.forEach((w,i)=>{
+ workers.forEach(w=>{
   if(filter && !w.matricula.toLowerCase().includes(filter.toLowerCase())) return;
 
   const d=diffDays(w.inicio,w.fim);
-  const e=editIndex===i;
+  const e=editId===w.id;
   const dis=e?'':'disabled';
 
   const badge =
@@ -183,7 +190,7 @@ function render(filter=''){
    : `<span class="font-bold">${d}</span>`;
 
   tableBody.innerHTML+=`
-<tr class="border-t ${w.concluido?'bg-gray-200 text-gray-500':''}">
+<tr class="border-t ${w.concluido?'bg-gray-200 text-gray-500':''}" data-id="${w.id}">
 <td>${w.id}</td>
 <td><input ${dis} value="${w.matricula}" class="border p-1 w-full"></td>
 <td><input ${dis} value="${w.nome}" class="border p-1 w-full"></td>
@@ -195,11 +202,11 @@ function render(filter=''){
 <td class="text-center"><input ${dis} type="checkbox" ${w.comunicado?'checked':''}></td>
 <td class="text-center"><input ${dis} type="checkbox" ${w.concluido?'checked':''}></td>
 <td class="text-center space-x-1">
-<button onclick="toggleEdit(${i})"
+<button onclick="toggleEdit('${w.id}')"
  class="px-2 py-1 rounded ${e?'bg-green-600':'bg-blue-600'} text-white">
 ${e?'Guardar':'Editar'}
 </button>
-${e?`<button onclick="deleteWorker(${i})"
+${e?`<button onclick="deleteWorker('${w.id}')"
  class="px-2 py-1 bg-red-600 text-white rounded">Eliminar</button>`:''}
 </td>
 </tr>`;
@@ -210,52 +217,52 @@ function addWorker(){
  if(!matricula.value||!nome.value||!inicio.value){
   alert('Campos obrigatórios em falta'); return;
  }
-
- if(workers.some(w=>w.matricula===matricula.value)){
-  alert('Aviso: matrícula já existente');
- }
-
  workers.push({
   id:String(nextId++).padStart(7,'0'),
   matricula:matricula.value, nome:nome.value, centro:centro.value,
   inicio:inicio.value, fim:fim.value, obs:obs.value,
   comunicado:comunicado.checked, concluido:concluido.checked
  });
-
  render(); markUnsaved();
  matricula.value=nome.value=centro.value=inicio.value=fim.value=obs.value='';
  comunicado.checked=concluido.checked=false;
 }
 
-function toggleEdit(i){
- if(editIndex===i){
-  const r=tableBody.children[i].querySelectorAll('input');
+function toggleEdit(id){
+ if(editId===id){
+  const row=document.querySelector(`tr[data-id="${id}"]`);
+  const r=row.querySelectorAll('input');
+  const i=workers.findIndex(w=>w.id===id);
+
   workers[i]={...workers[i],
    matricula:r[0].value, nome:r[1].value, centro:r[2].value,
    inicio:r[3].value, fim:r[4].value, obs:r[5].value,
    comunicado:r[6].checked, concluido:r[7].checked
   };
-  editIndex=null;
+  editId=null;
   markUnsaved();
- } else editIndex=i;
+ } else editId=id;
+
  render(searchMatricula.value);
 }
 
-function deleteWorker(i){
+function deleteWorker(id){
  if(confirm('Eliminar registo?')){
-  workers.splice(i,1);
-  editIndex=null;
+  workers=workers.filter(w=>w.id!==id);
+  editId=null;
   render(searchMatricula.value);
   markUnsaved();
  }
 }
 
 function exportJSON(){
- const blob=new Blob([JSON.stringify({nextId,workers},null,2)],{type:'application/json'});
+ const lastSaved=formatTS(new Date());
+ const blob=new Blob([JSON.stringify({lastSaved,nextId,workers},null,2)],{type:'application/json'});
  const a=document.createElement('a');
  a.href=URL.createObjectURL(blob);
  a.download='acidentes.json';
  a.click();
+ fileInfo.innerText='Última gravação: '+lastSaved;
  clearUnsaved();
 }
 
@@ -265,6 +272,7 @@ function importJSON(e){
   const p=JSON.parse(ev.target.result);
   workers=p.workers||[];
   nextId=p.nextId||1;
+  fileInfo.innerText='Última gravação: '+(p.lastSaved||'—');
   enableApp();
   status.innerText='✔️ Ficheiro carregado';
   status.className='mb-4 p-4 rounded-xl bg-green-100 text-green-700 font-semibold';
@@ -282,7 +290,9 @@ function exportExcel(){
 }
 
 function updateCharts(){
- const months={}, ranges={'1-15':0,'16-30':0,'31-60':0,'61-120':0,'+121':0};
+ const months={}, 
+       ranges={'1-15':0,'16-30':0,'31-60':0,'61-120':0,'+121':0},
+       centers={};
 
  workers.forEach(w=>{
   const m=w.inicio.slice(0,7);
@@ -293,22 +303,31 @@ function updateCharts(){
   else if(d<=60)ranges['31-60']++;
   else if(d<=120)ranges['61-120']++;
   else ranges['+121']++;
+  const c=w.centro||'Sem Centro';
+  centers[c]=(centers[c]||0)+1;
  });
 
  chartMonth?.destroy();
  chartRange?.destroy();
+ chartCenter?.destroy();
 
  const ml=Object.keys(months).sort();
 
- chartMonth=new Chart(chartMonth?.canvas||document.getElementById('chartMonth'),{
+ chartMonth=new Chart(document.getElementById('chartMonth'),{
   type:'bar',
   data:{labels:ml,datasets:[{data:ml.map(l=>months[l])}]},
   options:{plugins:{datalabels:{anchor:'end',align:'top'}}}
  });
 
- chartRange=new Chart(chartRange?.canvas||document.getElementById('chartRange'),{
+ chartRange=new Chart(document.getElementById('chartRange'),{
   type:'bar',
   data:{labels:Object.keys(ranges),datasets:[{data:Object.values(ranges)}]},
+  options:{plugins:{datalabels:{anchor:'end',align:'top'}}}
+ });
+
+ chartCenter=new Chart(document.getElementById('chartCenter'),{
+  type:'bar',
+  data:{labels:Object.keys(centers),datasets:[{data:Object.values(centers)}]},
   options:{plugins:{datalabels:{anchor:'end',align:'top'}}}
  });
 }
